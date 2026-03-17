@@ -6,13 +6,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Connect to Supabase database
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// ─── CANDIDATE ROUTE ─────────────────────────────────────────────
 app.post("/analyze", async (req, res) => {
   const { answers } = req.body;
 
@@ -33,30 +31,33 @@ Return this exact JSON structure:
 }`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1024,
+        temperature: 0.7
       })
     });
 
     const data = await response.json();
 
-    console.log("Gemini response status:", response.status);
-    console.log("Gemini response body:", JSON.stringify(data));
+    console.log("Groq response status:", response.status);
+    console.log("Groq response body:", JSON.stringify(data));
 
-    if (!data.candidates || !data.candidates[0]) {
-      console.error("Unexpected Gemini response:", data);
-      return res.status(500).json({ error: "AI returned an unexpected response", detail: data });
+    if (!data.choices || !data.choices[0]) {
+      console.error("Unexpected Groq response:", data);
+      return res.status(500).json({ error: "AI returned unexpected response", detail: data });
     }
 
-    const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
+    const text = data.choices[0].message.content.replace(/```json|```/g, "").trim();
     const result = JSON.parse(text);
 
-    // Save to Supabase database
     const { error: dbError } = await supabase.from("candidates").insert({
       name: answers.name || "Anonymous",
       answers: answers,
@@ -79,7 +80,6 @@ Return this exact JSON structure:
   }
 });
 
-// ─── HR LOGIN ROUTE ───────────────────────────────────────────────
 app.post("/hr/login", (req, res) => {
   const { password } = req.body;
   if (password === process.env.HR_PASSWORD) {
@@ -89,7 +89,6 @@ app.post("/hr/login", (req, res) => {
   }
 });
 
-// ─── HR DASHBOARD ROUTE ───────────────────────────────────────────
 app.get("/hr/candidates", async (req, res) => {
   const token = req.headers["x-hr-token"];
   if (token !== process.env.HR_PASSWORD) {
@@ -105,7 +104,6 @@ app.get("/hr/candidates", async (req, res) => {
   res.json(data);
 });
 
-// ─── START SERVER ─────────────────────────────────────────────────
 app.listen(process.env.PORT, () => {
   console.log(`Backend running on port ${process.env.PORT}`);
 });
