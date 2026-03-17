@@ -33,33 +33,27 @@ Return this exact JSON structure:
 }`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }]
+        contents: [{ parts: [{ text: prompt }] }]
       })
     });
 
     const data = await response.json();
 
-    // Log the full response so we can debug if something goes wrong
-    console.log("Anthropic response status:", response.status);
-    console.log("Anthropic response body:", JSON.stringify(data));
+    console.log("Gemini response status:", response.status);
+    console.log("Gemini response body:", JSON.stringify(data));
 
-    // Check the response is valid before reading it
-    if (!data.content || !data.content[0] || !data.content[0].text) {
-      console.error("Unexpected API response structure:", data);
+    if (!data.candidates || !data.candidates[0]) {
+      console.error("Unexpected Gemini response:", data);
       return res.status(500).json({ error: "AI returned an unexpected response", detail: data });
     }
 
-    const text = data.content[0].text.replace(/```json|```/g, "").trim();
+    const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(text);
 
     // Save to Supabase database
