@@ -132,7 +132,14 @@ Return this EXACT JSON structure:
       rubric_consistency: result.rubricConsistency,
       rubric_self_awareness: result.rubricSelfAwareness,
       rubric_clarity: result.rubricClarity,
-      shortlisted: false
+      shortlisted: false,
+      answers: {
+        ...answers,
+        personaSnapshot: result.personaSnapshot,
+        weaknessAnalysis: result.weaknessAnalysis,
+        watchpoints: result.watchpoints,
+        interviewFollowUps: result.interviewFollowUps,
+      }
     });
 
     if (dbError) console.error("Database save error:", dbError);
