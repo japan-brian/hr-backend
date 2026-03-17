@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
@@ -14,7 +13,6 @@ const supabase = createClient(
 );
 
 // ─── CANDIDATE ROUTE ─────────────────────────────────────────────
-// This receives the candidate's answers, asks the AI, saves to database
 app.post("/analyze", async (req, res) => {
   const { answers } = req.body;
 
@@ -35,7 +33,6 @@ Return this exact JSON structure:
 }`;
 
   try {
-    // Ask the AI
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -51,11 +48,22 @@ Return this exact JSON structure:
     });
 
     const data = await response.json();
+
+    // Log the full response so we can debug if something goes wrong
+    console.log("Anthropic response status:", response.status);
+    console.log("Anthropic response body:", JSON.stringify(data));
+
+    // Check the response is valid before reading it
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      console.error("Unexpected API response structure:", data);
+      return res.status(500).json({ error: "AI returned an unexpected response", detail: data });
+    }
+
     const text = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(text);
 
     // Save to Supabase database
-    const { error } = await supabase.from("candidates").insert({
+    const { error: dbError } = await supabase.from("candidates").insert({
       name: answers.name || "Anonymous",
       answers: answers,
       primary_strength: result.primaryStrength,
@@ -68,17 +76,16 @@ Return this exact JSON structure:
       full_assessment: result.fullAssessment
     });
 
-    if (error) console.error("Database save error:", error);
+    if (dbError) console.error("Database save error:", dbError);
 
     res.json(result);
   } catch (err) {
-    console.error(err);
+    console.error("Caught error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ─── HR LOGIN ROUTE ───────────────────────────────────────────────
-// HR manager types password to get access
 app.post("/hr/login", (req, res) => {
   const { password } = req.body;
   if (password === process.env.HR_PASSWORD) {
@@ -89,7 +96,6 @@ app.post("/hr/login", (req, res) => {
 });
 
 // ─── HR DASHBOARD ROUTE ───────────────────────────────────────────
-// Returns all candidates — only works with correct password
 app.get("/hr/candidates", async (req, res) => {
   const token = req.headers["x-hr-token"];
   if (token !== process.env.HR_PASSWORD) {
