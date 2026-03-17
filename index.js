@@ -11,13 +11,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const CLIFTON_THEMES = {
-  "Executing": ["Achiever", "Arranger", "Discipline", "Focus", "Responsibility"],
-  "Influencing": ["Activator", "Command", "Communication", "Woo", "Self-Assurance"],
-  "Relationship Building": ["Empathy", "Developer", "Harmony", "Connectedness", "Includer"],
-  "Strategic Thinking": ["Analytical", "Ideation", "Learner", "Strategic", "Futuristic"]
-};
-
 app.post("/analyze", async (req, res) => {
   const { answers } = req.body;
 
@@ -27,13 +20,13 @@ Candidate responses:
 ${Object.entries(answers).map(([k, v]) => `${k}: ${v}`).join("\n")}
 
 STEP 1 - QUALITY CHECK:
-First determine if the answers are genuine and thoughtful or gibberish/nonsense. Short answers under 3 words for open questions, random letters, or clearly fake responses should be flagged.
+Determine if answers are genuine and thoughtful or gibberish/nonsense. Random letters, single words for open questions, or clearly fake responses = not genuine.
 
 STEP 2 - RUBRIC SCORING (only if genuine):
 Score each dimension 0-25:
 - Depth (0-25): How detailed, specific and thoughtful are the answers?
-- Consistency (0-25): Do answers align with each other across sections?
-- Self Awareness (0-25): Does the person understand their own strengths and patterns?
+- Consistency (0-25): Do answers align with each other across all sections?
+- Self Awareness (0-25): Does the person deeply understand their own strengths and patterns?
 - Clarity (0-25): Are answers clear, specific, and easy to understand?
 
 STEP 3 - CLIFTON ANALYSIS:
@@ -44,31 +37,44 @@ Available themes by domain:
 - Strategic Thinking: Analytical, Ideation, Learner, Strategic, Futuristic
 
 STEP 4 - BEHAVIORAL SIGNALS:
-- Locus of Control: Does the person take ownership of outcomes (Internal) or attribute things to external factors (External)?
+- Locus of Control: Does the person take ownership of outcomes (Internal) or attribute things to external factors (External) or both (Balanced)?
 - Team Orientation: Based on use of "we/us" vs "I/me" — are they Team-First, Balanced, or Independent?
+
+STEP 5 - DEEP ANALYSIS:
+- Persona Snapshot: One sharp, specific sentence describing this candidate's professional identity. NOT generic. Reference their actual answers.
+- Weakness Analysis: 2-3 honest, direct observations about genuine weaknesses or risks. Do NOT frame positively. Be objective and useful for HR. Reference specific answers as evidence.
+- Watchpoints: 2 subtle risk flags HR should monitor. Specific and grounded in their answers.
+- Interview Follow-ups: 3 sharp, specific probing questions HR should ask this exact candidate in the live interview. Reference things they said or left vague. Make these genuinely useful.
+
+STEP 6 - WRITE IN THIRD PERSON:
+The full assessment and hiring note must refer to the candidate in third person (e.g. "Alex demonstrates..." not "Alex, you are..."). HR is the audience, not the candidate.
 
 Return this EXACT JSON structure:
 {
   "genuine": true or false,
-  "genuineReason": "only if false — one sentence explaining why answers seem fake",
+  "genuineReason": "only if false — one sentence explaining why",
   "rubricDepth": number 0-25,
   "rubricConsistency": number 0-25,
   "rubricSelfAwareness": number 0-25,
   "rubricClarity": number 0-25,
-  "confidence": sum of all four rubric scores,
+  "confidence": sum of all four rubric scores as a number out of 100,
   "primaryStrength": one of ["Executing", "Influencing", "Strategic Thinking", "Relationship Building"],
   "secondaryStrength": different one from same four,
   "cliftonTheme": one specific theme matching the primary strength domain,
-  "cliftonDescription": "2-3 sentences describing what this specific Clifton theme means for THIS person based on their answers. Make it feel personal and specific.",
+  "cliftonDescription": "2-3 sentences describing what this specific Clifton theme means for THIS person based on their actual answers. Specific, not generic.",
+  "personaSnapshot": "One sharp sentence describing this candidate's professional identity. Reference their actual background.",
   "roleId": one of ["ops", "pm", "creative", "data", "people", "engineer", "bd", "coach", "researcher", "founder"],
-  "environment": "2-3 affirming sentences about where this person thrives. Be specific to their answers.",
-  "greenFlags": ["specific positive observation 1", "specific positive observation 2", "specific positive observation 3"],
-  "growthEdge": "One positively framed sentence about their development area. Never use negative language.",
+  "environment": "2-3 affirming sentences about where this person thrives. Specific to their answers.",
+  "greenFlags": ["specific positive observation 1 grounded in their answers", "specific positive observation 2", "specific positive observation 3"],
+  "weaknessAnalysis": ["direct honest weakness 1 with evidence from answers", "direct honest weakness 2", "optional third weakness if clearly present"],
+  "watchpoints": ["subtle risk flag 1 specific to this candidate", "subtle risk flag 2"],
+  "interviewFollowUps": ["specific probing question 1 referencing something they said", "specific probing question 2", "specific probing question 3"],
+  "growthEdge": "One positively framed sentence about their primary development area.",
   "locusOfControl": one of ["Internal", "External", "Balanced"],
   "teamOrientation": one of ["Team-First", "Balanced", "Independent"],
   "hireRecommendation": one of ["Strong Yes", "Yes", "Maybe"],
-  "hiringNote": "2-3 sentences for the hiring manager about unique value, team complement, and one thing to watch.",
-  "fullAssessment": "A warm, celebratory 4-5 sentence paragraph written directly to the candidate like Spotify Wrapped. Make them feel seen, valued, and excited about their potential."
+  "hiringNote": "2-3 sentences in third person for the hiring manager about unique value, team complement, and one thing to watch.",
+  "fullAssessment": "A sharp, insightful 4-5 sentence paragraph in THIRD PERSON written for HR. Describe the candidate's strengths, working style, and fit. Reference their actual answers specifically. Professional tone, not celebratory."
 }`;
 
   try {
@@ -81,7 +87,7 @@ Return this EXACT JSON structure:
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 1500,
+        max_tokens: 2000,
         temperature: 0.7
       })
     });
@@ -97,11 +103,10 @@ Return this EXACT JSON structure:
     const text = data.choices[0].message.content.replace(/```json|```/g, "").trim();
     const result = JSON.parse(text);
 
-    // Block gibberish answers
     if (!result.genuine) {
-      return res.status(400).json({ 
-        error: "validation_failed", 
-        message: result.genuineReason || "Please provide thoughtful, genuine answers to continue." 
+      return res.status(400).json({
+        error: "validation_failed",
+        message: result.genuineReason || "Please provide thoughtful, genuine answers to continue."
       });
     }
 
@@ -132,7 +137,16 @@ Return this EXACT JSON structure:
 
     if (dbError) console.error("Database save error:", dbError);
 
-    res.json(result);
+    // Store extra fields in answers for dashboard display
+    const enrichedResult = {
+      ...result,
+      personaSnapshot: result.personaSnapshot,
+      weaknessAnalysis: result.weaknessAnalysis,
+      watchpoints: result.watchpoints,
+      interviewFollowUps: result.interviewFollowUps,
+    };
+
+    res.json(enrichedResult);
   } catch (err) {
     console.error("Caught error:", err);
     res.status(500).json({ error: err.message });
